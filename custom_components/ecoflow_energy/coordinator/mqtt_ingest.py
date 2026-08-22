@@ -121,8 +121,11 @@ class MqttIngestMixin:
         to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
-        # SET reply tracking (all modes): log acknowledgement, do not process as data
-        if "/set_reply" in topic:
+        # SET reply tracking (all modes): log acknowledgement, do not process
+        # as data. The same predicate the capture buckets on
+        # (`frame_capture._topic_class`), so a reply can never route as a
+        # reply here and then be filed among the telemetry there.
+        if topic.endswith("/set_reply"):
             # The reply body echoes the full serial in Standard Mode, and
             # reporters attach debug logs to public issues. Masked first and
             # truncated second, so the cut can never leave a serial fragment
@@ -145,6 +148,14 @@ class MqttIngestMixin:
             # carries no identifier of its own.
             channel = "app" if topic.startswith("/app/") else "open"
             self._log_event("set_reply", f"topic={channel}/set_reply")
+            # Recorded for the same reason the write itself is, and it is not
+            # the same evidence: a write frame says what was asked for, its
+            # reply says whether the device took it. The replies to the vendor
+            # app's own writes arrive here too, on a channel we share with it,
+            # so the answer to a setting nobody here can send is on the wire
+            # already. Recorded and then dropped, like the write: an echo of a
+            # request is not a reading. Parsing stays off this path.
+            self._capture_raw_frame(topic, payload, None)
             if self.device_type == DEVICE_TYPE_DELTA3:
                 self._check_delta3_set_ack(payload)
             return
@@ -240,7 +251,15 @@ class MqttIngestMixin:
             # the Paho thread should not hold the lock across that.
             key = frame_key(entry, payload, secrets)
             with self._raw_frames_lock:
-                self._raw_frames.add(key, entry)
+                # The parsed readings decide whether this frame said
+                # something its message type has never said, which is what
+                # keeps a configuration readback from being thinned away by
+                # the telemetry it arrives among. Values travel with the
+                # names because a setting somebody just moved is a changed
+                # value of a key the type has carried for hours, not a new
+                # key. A frame the parser did not read - a write, a reply -
+                # passes None and is sampled on arrival alone.
+                self._raw_frames.add(key, entry, readings=parsed or None)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 
