@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import time
 from typing import Any
 
 from ..const import (
@@ -130,81 +129,6 @@ class MqttIngestMixin:
                     and new < old
                 ):
                     del parsed[key]
-        return parsed
-
-    # Keys guarded against a spurious 0 reading. Both SoC sensors, since a
-    # feed interruption can drop either one to 0 depending on which fields
-    # the last frame before the gap happened to carry.
-    _SOC_ZERO_GUARD_KEYS: frozenset[str] = frozenset({"soc_pct", "soc_precise_pct"})
-
-    def _guard_soc_zero_drop(self, parsed: dict[str, Any]) -> dict[str, Any]:
-        """Hold back a suspect 0% SoC reading, restoring the last known good
-        value in its place instead of publishing the 0.
-
-        A 0% report arriving right as the feed drops out - rather than from
-        a real gradual discharge - would otherwise flash a dashboard from,
-        say, 62% straight to 0% and back once the feed recovers. When an
-        incoming SoC reading is exactly 0 and a real, higher reading was
-        cached earlier, the incoming 0 is replaced with that cached value
-        before the merge runs, so the sensor keeps showing its last known
-        value until a further update settles it one way or the other.
-
-        The cache (`_soc_last_good`) is written and read only here, rather
-        than reading `_device_data` back out at guard time, so nothing else
-        in the coordinator can invalidate it from underneath. A fallback to
-        `_device_data` covers the one gap that leaves: a restart, where this
-        guard has not cached anything yet this session.
-
-        Runs after `_resolve_soc` in both callers, so it always sees the
-        final resolved `soc_pct` (system figure or unit stand-in) rather
-        than a pre-resolution value that may not end up published at all.
-
-        SOC_ZERO_HOLD_MAX_S bounds this: a suspect 0 that persists past that
-        window is accepted rather than held forever, since a battery that is
-        genuinely empty must eventually be shown as empty.
-        """
-        from ..const import SOC_ZERO_HOLD_MAX_S
-
-        now = time.monotonic()
-        for key in self._SOC_ZERO_GUARD_KEYS:
-            if key not in parsed:
-                continue
-            new = parsed[key]
-            if not (isinstance(new, (int, float)) and new == 0):
-                # A real reading (non-zero, or an explicit None clear).
-                # Cache it if numeric and clear any pending hold - whatever
-                # the hold was protecting against, it's over.
-                self._soc_zero_hold.pop(key, None)
-                if isinstance(new, (int, float)):
-                    self._soc_last_good[key] = new
-                continue
-
-            last_good = self._soc_last_good.get(key)
-            if last_good is None:
-                # This guard has not cached a reading yet this session
-                # (e.g. right after a restart) - fall back to whatever the
-                # coordinator last merged.
-                fallback = self._device_data.get(key)
-                if isinstance(fallback, (int, float)):
-                    last_good = fallback
-            if not (isinstance(last_good, (int, float)) and last_good > 0):
-                # Nothing good to protect - no previous reading anywhere,
-                # or it was already at/near zero. This 0 is not suspicious.
-                continue
-
-            held_since = self._soc_zero_hold.get(key)
-            if held_since is None:
-                held_since = now
-                self._soc_zero_hold[key] = held_since
-            if now - held_since < SOC_ZERO_HOLD_MAX_S:
-                # Restore the cached value in place of the suspect 0, then
-                # let the merge run as normal.
-                parsed[key] = last_good
-            else:
-                # Held long enough without a real reading arriving - accept
-                # it as a genuinely empty battery rather than hold forever.
-                self._soc_zero_hold.pop(key, None)
-                self._soc_last_good[key] = 0.0
         return parsed
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:

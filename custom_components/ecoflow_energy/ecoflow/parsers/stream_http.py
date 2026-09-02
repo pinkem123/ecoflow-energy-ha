@@ -138,4 +138,17 @@ def parse_stream_quota(raw: dict) -> dict[str, Any]:
         result["batt_charge_power_w"] = batt_w if batt_w > 0 else 0.0
         result["batt_discharge_power_w"] = abs(batt_w) if batt_w < 0 else 0.0
 
+    # Friendlier, enabled-by-default aliases for the two readings people ask
+    # for most on this device - see stream_proto.py's _finalize_stream_state
+    # for the Enhanced-mode equivalent. Same values as `solar_w`
+    # (powGetPvSum) and `home_w` (powGetSysLoad) above; those keep their
+    # existing names and diagnostic/off-by-default status.
+    pv_power_total = result.get("solar_w")
+    if pv_power_total is not None:
+        result["pv_power_total_w"] = pv_power_total
+
+    system_load = result.get("home_w")
+    if system_load is not None:
+        result["system_load_w"] = system_load
+
     return result

@@ -1,0 +1,10 @@
+--- custom_components/ecoflow_energy/coordinator/state_apply.py
++++ custom_components/ecoflow_energy/coordinator/state_apply.py
+@@ -99,6 +99,7 @@ class StateApplyMixin:
+             self._last_ems_param_change_ts = now
+         self._resolve_unit_power(parsed)
+         self._resolve_soc(parsed)
++        self._guard_soc_zero_drop(parsed)
+         self._note_value_change(parsed)
+         self._device_data.update(parsed)
+ 

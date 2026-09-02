@@ -161,6 +161,33 @@
   },
   "entity": {
     "sensor": {
+      "cms_batt_soc": {
+        "name": "SoC"
+      },
+      "pow_in_sum_w": {
+        "name": "Input Total"
+      },
+      "pow_out_sum_w": {
+        "name": "Output Total"
+      },
+      "pv1_in_w": {
+        "name": "Solar Input 1"
+      },
+      "pv2_in_w": {
+        "name": "Solar Input 2"
+      },
+      "dc_12v_out_w": {
+        "name": "12V Output"
+      },
+      "ac1_out_w": {
+        "name": "AC Output 1"
+      },
+      "ac2_out_w": {
+        "name": "AC Output 2"
+      },
+      "typec3_w": {
+        "name": "Type-C 3"
+      },
       "solar_w": {
         "name": "Solar Power"
       },
@@ -217,6 +244,12 @@
       },
       "batt_design_cap_mah": {
         "name": "Design Capacity"
+      },
+      "batt_charge_capacity_ah": {
+        "name": "Battery Charge Capacity"
+      },
+      "batt_discharge_capacity_ah": {
+        "name": "Battery Discharge Capacity"
       },
       "grid_import_power_w": {
         "name": "Grid Import Power"
@@ -445,6 +478,33 @@
           "discharging": "Discharging",
           "charging": "Charging"
         }
+      },
+      "soc_precise_pct": {
+        "name": "Battery SOC (Precise)"
+      },
+      "unit_batt_w": {
+        "name": "Unit Battery Power"
+      },
+      "unit_soc_pct": {
+        "name": "Unit Battery SOC"
+      },
+      "ac_voltage_v": {
+        "name": "AC Voltage"
+      },
+      "ac_frequency_hz": {
+        "name": "AC Frequency"
+      },
+      "backup_reserve_pct": {
+        "name": "Backup Reserve"
+      },
+      "max_charge_soc_pct": {
+        "name": "Max Charge SoC"
+      },
+      "min_discharge_soc_pct": {
+        "name": "Min Discharge SoC"
+      },
+      "ac_charge_power_limit_w": {
+        "name": "AC Charge Power Limit"
       },
       "soc": {
         "name": "SoC"
@@ -1181,22 +1241,22 @@
       "wifi_status": {
         "name": "WiFi Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "ethernet_status": {
         "name": "Ethernet Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "cellular_status": {
         "name": "4G Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "ems_led_brightness": {
@@ -1232,6 +1292,9 @@
       "bp_max_discharge_power_w": {
         "name": "Battery Discharge Power (Max)"
       },
+      "anderson_out_w": {
+        "name": "Anderson output"
+      },
       "pv_total_w": {
         "name": "PV Total Power"
       },
@@ -1258,24 +1321,6 @@
       },
       "pv2_current_a": {
         "name": "PV 2 Current"
-      },
-      "pv3_voltage_v": {
-        "name": "PV 3 Voltage"
-      },
-      "pv3_current_a": {
-        "name": "PV 3 Current"
-      },
-      "pv4_voltage_v": {
-        "name": "PV 4 Voltage"
-      },
-      "pv4_current_a": {
-        "name": "PV 4 Current"
-      },
-      "pv_power_total_w": {
-        "name": "PV Power Total"
-      },
-      "system_load_w": {
-        "name": "System Load"
       },
       "ac_current_a": {
         "name": "AC Current"
@@ -1445,11 +1490,36 @@
           "faulted": "Fault"
         }
       },
-      "unit_batt_w": {
-        "name": "Unit Battery Power"
+      "inv_output_w": {
+        "name": "Inverter Output Power"
       },
-      "unit_soc_pct": {
-        "name": "Unit Battery SOC"
+      "inv_output_energy_kwh": {
+        "name": "Inverter Output Energy"
+      },
+      "plug_total_w": {
+        "name": "Smart Plug Load Power"
+      },
+      "permanent_watts_w": {
+        "name": "Custom Load Power"
+      },
+      "lower_limit_pct": {
+        "name": "Discharge Limit"
+      },
+      "upper_limit_pct": {
+        "name": "Charge Limit"
+      },
+      "rated_power_w": {
+        "name": "Rated Power"
+      },
+      "pv1_voltage_v": {
+        "name": "PV 1 Voltage"
+      },
+      "supply_priority": {
+        "name": "Power Supply Priority",
+        "state": {
+          "power_supply": "Prioritize Power Supply",
+          "battery_storage": "Prioritize Battery Storage"
+        }
       },
       "grid_l1_w": {
         "name": "Phase A Power"
@@ -1495,6 +1565,30 @@
       },
       "grid_power_factor": {
         "name": "Power Factor"
+      },
+      "schedule_1_window": {
+        "name": "Schedule 1 Window"
+      },
+      "schedule_2_window": {
+        "name": "Schedule 2 Window"
+      },
+      "schedule_3_window": {
+        "name": "Schedule 3 Window"
+      },
+      "schedule_4_window": {
+        "name": "Schedule 4 Window"
+      },
+      "schedule_5_window": {
+        "name": "Schedule 5 Window"
+      },
+      "schedule_6_window": {
+        "name": "Schedule 6 Window"
+      },
+      "schedule_7_window": {
+        "name": "Schedule 7 Window"
+      },
+      "schedule_8_window": {
+        "name": "Schedule 8 Window"
       }
     },
     "binary_sensor": {
@@ -1534,11 +1628,38 @@
       "ems_sg_ready_enabled": {
         "name": "SG Ready Enabled"
       },
+      "port_priority_active": {
+        "name": "Port priority active"
+      },
       "backup_reserve_enabled": {
         "name": "Backup Reserve"
       },
       "backup_socket_enabled": {
         "name": "Backup Socket"
+      },
+      "schedule_1_running": {
+        "name": "Schedule 1 Running"
+      },
+      "schedule_2_running": {
+        "name": "Schedule 2 Running"
+      },
+      "schedule_3_running": {
+        "name": "Schedule 3 Running"
+      },
+      "schedule_4_running": {
+        "name": "Schedule 4 Running"
+      },
+      "schedule_5_running": {
+        "name": "Schedule 5 Running"
+      },
+      "schedule_6_running": {
+        "name": "Schedule 6 Running"
+      },
+      "schedule_7_running": {
+        "name": "Schedule 7 Running"
+      },
+      "schedule_8_running": {
+        "name": "Schedule 8 Running"
       },
       "grid_l1_connected": {
         "name": "Phase A Connected"
@@ -1575,6 +1696,30 @@
       "plug_switch": {
         "name": "Plug"
       },
+      "ac_out_switch": {
+        "name": "AC output"
+      },
+      "ac2_out_switch": {
+        "name": "AC output 2"
+      },
+      "dc_12v_out_switch": {
+        "name": "12V output"
+      },
+      "energy_backup_switch": {
+        "name": "Backup reserve"
+      },
+      "bypass_out_disable_switch": {
+        "name": "Bypass output disabled"
+      },
+      "port_priority_ac1_switch": {
+        "name": "AC 1 non-essential"
+      },
+      "port_priority_ac2_switch": {
+        "name": "AC 2 non-essential"
+      },
+      "port_priority_dc_switch": {
+        "name": "DC non-essential"
+      },
       "backup_socket_switch": {
         "name": "Backup Socket"
       },
@@ -1583,6 +1728,30 @@
       },
       "ac_outlet_2_switch": {
         "name": "AC Outlet 2"
+      },
+      "schedule_1_enabled": {
+        "name": "Schedule 1 Enabled"
+      },
+      "schedule_2_enabled": {
+        "name": "Schedule 2 Enabled"
+      },
+      "schedule_3_enabled": {
+        "name": "Schedule 3 Enabled"
+      },
+      "schedule_4_enabled": {
+        "name": "Schedule 4 Enabled"
+      },
+      "schedule_5_enabled": {
+        "name": "Schedule 5 Enabled"
+      },
+      "schedule_6_enabled": {
+        "name": "Schedule 6 Enabled"
+      },
+      "schedule_7_enabled": {
+        "name": "Schedule 7 Enabled"
+      },
+      "schedule_8_enabled": {
+        "name": "Schedule 8 Enabled"
       }
     },
     "number": {
@@ -1625,8 +1794,20 @@
       "max_watts": {
         "name": "Max Power Limit"
       },
+      "min_discharge_soc": {
+        "name": "Min Discharge SoC"
+      },
       "ac_charge_power_limit": {
         "name": "AC Charge Power"
+      },
+      "port_priority_ac1_soc": {
+        "name": "AC 1 cutoff level"
+      },
+      "port_priority_ac2_soc": {
+        "name": "AC 2 cutoff level"
+      },
+      "port_priority_dc_soc": {
+        "name": "DC cutoff level"
       },
       "max_charge_soc_pct": {
         "name": "Max Charge SoC"
@@ -1645,6 +1826,30 @@
       },
       "max_grid_input_power_w": {
         "name": "Max Grid Input Power"
+      },
+      "schedule_1_power_w": {
+        "name": "Schedule 1 Charge Power"
+      },
+      "schedule_2_power_w": {
+        "name": "Schedule 2 Charge Power"
+      },
+      "schedule_3_power_w": {
+        "name": "Schedule 3 Charge Power"
+      },
+      "schedule_4_power_w": {
+        "name": "Schedule 4 Charge Power"
+      },
+      "schedule_5_power_w": {
+        "name": "Schedule 5 Charge Power"
+      },
+      "schedule_6_power_w": {
+        "name": "Schedule 6 Charge Power"
+      },
+      "schedule_7_power_w": {
+        "name": "Schedule 7 Charge Power"
+      },
+      "schedule_8_power_w": {
+        "name": "Schedule 8 Charge Power"
       }
     },
     "select": {

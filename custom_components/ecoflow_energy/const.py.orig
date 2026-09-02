@@ -111,14 +111,6 @@ HARD_UNAVAILABLE_S = 600.0  # 10 min: entities go unavailable
 SMARTPLUG_HARD_UNAVAILABLE_S = 600.0  # 10 min: SmartPlug hard cutoff
 HTTP_FALLBACK_INTERVAL_S = 30
 
-# SoC zero-drop guard: how long a suspect 0% reading is held back (last
-# known value shown instead) before it is accepted as real. Comfortably
-# past HARD_UNAVAILABLE_S, so a feed interruption never forces this to
-# expire while the device is still marked unavailable for the same reason;
-# a battery that is genuinely empty is still shown as empty once the feed
-# recovers and keeps reporting 0.
-SOC_ZERO_HOLD_MAX_S = 900.0  # 15 min
-
 # Raw protobuf frame capture for diagnostics (app-auth push path), bucketed
 # by message type. A shared ring holds whatever arrives most often: a
 # PowerOcean pushes its live telemetry every few seconds while a command such
@@ -971,34 +963,14 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("unit_soc_pct", "Unit Battery SOC", "%", None, "measurement", "mdi:battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    # Two readable, enabled-by-default aliases for the readings people most
-    # often ask for on this device: the PV sum across every string and the
-    # overall house/system load. Both are the same wire values as `solar_w`
-    # (field 517, pow_get_pv_sum) and `home_w` (field 516, pow_get_sys_load)
-    # above and below - those two stay as they are since renaming a key
-    # would orphan the entity for everyone who already has it - but those
-    # are diagnostic and off by default, which makes them easy to miss for
-    # an owner who just wants "how much am I generating" and "how much is
-    # the house drawing" without digging through the disabled-entities list.
-    # Naming follows ha-ef-ble's own field names for the same two readings
-    # (`pv_power_sum`, `load_system`) rather than this repo's `solar_w`/
-    # `home_w`, since those names carry baggage from other devices in this
-    # integration (Solar Power elsewhere can mean third-party/meter-derived
-    # solar; this is the unit's own MPPT sum, not a meter reading).
-    EcoFlowSensorDef("pv_power_total_w", "PV Power Total", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
-    EcoFlowSensorDef("system_load_w", "System Load", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0),
     # Per-string PV. Standard mode reports these individually (powGetPv..
-    # powGetPv4); the protobuf stream also carries field numbers for strings
-    # 3 and 4 (996/997, plus voltage/current at 998-1001), confirmed against
-    # a real BK61 (Stream Ultra X) diagnostics capture: the four decoded
-    # strings are internally consistent (each string's voltage times current
-    # matches its own power) and their sum tracks the device's own PV total
-    # to within about 1 W. Strings 3 and 4 are gated on an actual report
-    # rather than created for every unit: a two-string owner never sends
-    # those fields, so gating on presence rather than listing per-prefix
-    # keeps a two-string owner from being stuck with an entity that stays
-    # unknown for good (#139). The gate is not needs-nonzero, because zero
-    # watts is what a string reads at night.
+    # powGetPv4); the protobuf stream carries a field number for strings 1 and
+    # 2 and none for the two above them, so on account sign-in those two can
+    # never fill. Strings 3 and 4 are therefore gated on an actual report
+    # rather than created for every unit: a four-string owner on developer keys
+    # gets them, and nobody else is left with an entity that stays unknown for
+    # good (#139). The gate is not needs-nonzero, because zero watts is what a
+    # string reads at night.
     EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
     EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
     EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
@@ -1011,14 +983,6 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pv_current_a", "PV Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("pv2_voltage_v", "PV 2 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("pv2_current_a", "PV 2 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
-    # PV 3/4 voltage and current, same accessory gate as pv3_w/pv4_w: only
-    # created once a device actually reports the field (Stream Ultra / Ultra
-    # X, BK11/BK61), so a two-string unit never gets a permanently-unknown
-    # entity for strings it doesn't have.
-    EcoFlowSensorDef("pv3_voltage_v", "PV 3 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
-    EcoFlowSensorDef("pv3_current_a", "PV 3 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
-    EcoFlowSensorDef("pv4_voltage_v", "PV 4 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
-    EcoFlowSensorDef("pv4_current_a", "PV 4 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
     EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -1344,10 +1308,6 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
     # lifetime total on the device that can never move off zero.
     "solar_w",
     "solar_energy_kwh",
-    # Aliases of solar_w/home_w above (see STREAM_SENSORS) - same absence,
-    # same reason.
-    "pv_power_total_w",
-    "system_load_w",
 })
 
 # Port priority exists on part of the Delta 3 family only. The app shows the

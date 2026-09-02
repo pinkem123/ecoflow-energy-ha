@@ -85,24 +85,6 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # power in field 616 on units that feed everything into the grid.
         361: ("pv1_w", _TYPE_FLOAT),
         70: ("pv2_w", _TYPE_FLOAT),
-        # PV strings 3 and 4, present on four-string units (Stream Ultra /
-        # Ultra X, BK11/BK61). Field numbers cross-checked against the
-        # independently reverse-engineered BLE protobuf schema in
-        # rabits/ha-ef-ble (bk_series.proto: pow_get_pv3=996, pow_get_pv4=997,
-        # plug_in_info_pv3_vol/amp=998/999, plug_in_info_pv4_vol/amp=1000/1001),
-        # then confirmed against a real diagnostics capture from a BK61
-        # (Stream Ultra X): the four decoded PV strings are internally
-        # consistent (each string's voltage times current matches its own
-        # power) and their sum tracks the device's own PV total (field 517)
-        # to within about 1 W. Sensor keys already exist in const.py
-        # (pv3_w/pv4_w, accessory-gated); they were simply unreachable in
-        # Enhanced Mode until this mapping existed.
-        996: ("pv3_w", _TYPE_FLOAT),
-        997: ("pv4_w", _TYPE_FLOAT),
-        998: ("pv3_voltage_v", _TYPE_FLOAT),
-        999: ("pv3_current_a", _TYPE_FLOAT),
-        1000: ("pv4_voltage_v", _TYPE_FLOAT),
-        1001: ("pv4_current_a", _TYPE_FLOAT),
         461: ("backup_reserve_pct", _TYPE_INT),
         # Configured feed-in cap in watts (user-changeable in the app).
         521: ("feed_grid_power_limit_w", _TYPE_INT),
@@ -144,11 +126,6 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # intentionally NOT mapped to the same key: it carries the slider
         # target rather than the live value and would otherwise flap with 994.
         994: ("led_brightness", _TYPE_INT),
-        # House/system load supplied directly from solar (pow_get_sys_load_from_pv
-        # in the ha-ef-ble schema). const.py already defines `home_from_solar_w`
-        # as a disabled-by-default diagnostic; this field number was simply
-        # never mapped, so the sensor stayed permanently unknown in Enhanced Mode.
-        1002: ("home_from_solar_w", _TYPE_FLOAT),
         1003: ("home_from_batt_w", _TYPE_FLOAT),
         # House/system load supplied from grid, excluding battery path.
         1004: ("home_from_grid_w", _TYPE_FLOAT),
@@ -358,19 +335,6 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
         grid_connection = result.get("grid_connection_power_w")
     if isinstance(grid_connection, (int, float)):
         result["ac_grid_connection_power_w"] = float(grid_connection)
-
-    # Friendlier, enabled-by-default aliases for the two readings people ask
-    # for most on this device. Same wire values as `solar_w` (517) and
-    # `home_w` (516) - those stay diagnostic/off-by-default and keep their
-    # existing names so nobody's history gets orphaned - these two are new
-    # keys with their own sensor definitions in const.py.
-    pv_power_total = result.get("solar_w")
-    if isinstance(pv_power_total, (int, float)):
-        result["pv_power_total_w"] = float(pv_power_total)
-
-    system_load = result.get("home_w")
-    if isinstance(system_load, (int, float)):
-        result["system_load_w"] = float(system_load)
 
     batt_w = result.get("batt_w")
     if isinstance(batt_w, (int, float)):

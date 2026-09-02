@@ -148,6 +148,7 @@ class HttpPollMixin:
         # Resolve the Stream unit/system SoC sources before merging, just as
         # the MQTT path does. This also removes the parser-private fallback.
         self._resolve_soc(parsed)
+        self._guard_soc_zero_drop(parsed)
         self._enforce_monotonic(parsed)
         # Same pop as in _apply_data: prevent EMS raw battery state from
         # overwriting the power-derived value (#50).

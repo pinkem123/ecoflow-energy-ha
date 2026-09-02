@@ -1322,24 +1322,6 @@
       "pv2_current_a": {
         "name": "PV 2 Strom"
       },
-      "pv3_voltage_v": {
-        "name": "PV 3 Spannung"
-      },
-      "pv3_current_a": {
-        "name": "PV 3 Strom"
-      },
-      "pv4_voltage_v": {
-        "name": "PV 4 Spannung"
-      },
-      "pv4_current_a": {
-        "name": "PV 4 Strom"
-      },
-      "pv_power_total_w": {
-        "name": "PV Gesamtleistung"
-      },
-      "system_load_w": {
-        "name": "Systemlast"
-      },
       "ac_current_a": {
         "name": "AC-Strom"
       },

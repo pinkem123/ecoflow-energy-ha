@@ -1,0 +1,403 @@
+diff --git a/custom_components/ecoflow_energy/const.py b/custom_components/ecoflow_energy/const.py
+index 08becb8..aa822b5 100644
+--- a/custom_components/ecoflow_energy/const.py
++++ b/custom_components/ecoflow_energy/const.py
+@@ -107,6 +107,14 @@ HARD_UNAVAILABLE_S = 600.0  # 10 min: entities go unavailable
+ SMARTPLUG_HARD_UNAVAILABLE_S = 600.0  # 10 min: SmartPlug hard cutoff
+ HTTP_FALLBACK_INTERVAL_S = 30
+ 
++# SoC zero-drop guard: how long a suspect 0% reading is held back (last
++# known value shown instead) before it is accepted as real. Comfortably
++# past HARD_UNAVAILABLE_S, so a feed interruption never forces this to
++# expire while the device is still marked unavailable for the same reason;
++# a battery that is genuinely empty is still shown as empty once the feed
++# recovers and keeps reporting 0.
++SOC_ZERO_HOLD_MAX_S = 900.0  # 15 min
++
+ # Raw protobuf frame capture for diagnostics (app-auth push path), bucketed
+ # by message type. A shared ring holds whatever arrives most often: a
+ # PowerOcean pushes its live telemetry every few seconds while a command such
+@@ -885,14 +893,34 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
+     EcoFlowSensorDef("unit_soc_pct", "Unit Battery SOC", "%", None, "measurement", "mdi:battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
++    # Two readable, enabled-by-default aliases for the readings people most
++    # often ask for on this device: the PV sum across every string and the
++    # overall house/system load. Both are the same wire values as `solar_w`
++    # (field 517, pow_get_pv_sum) and `home_w` (field 516, pow_get_sys_load)
++    # above and below - those two stay as they are since renaming a key
++    # would orphan the entity for everyone who already has it - but those
++    # are diagnostic and off by default, which makes them easy to miss for
++    # an owner who just wants "how much am I generating" and "how much is
++    # the house drawing" without digging through the disabled-entities list.
++    # Naming follows ha-ef-ble's own field names for the same two readings
++    # (`pv_power_sum`, `load_system`) rather than this repo's `solar_w`/
++    # `home_w`, since those names carry baggage from other devices in this
++    # integration (Solar Power elsewhere can mean third-party/meter-derived
++    # solar; this is the unit's own MPPT sum, not a meter reading).
++    EcoFlowSensorDef("pv_power_total_w", "PV Power Total", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
++    EcoFlowSensorDef("system_load_w", "System Load", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0),
+     # Per-string PV. Standard mode reports these individually (powGetPv..
+-    # powGetPv4); the protobuf stream carries a field number for strings 1 and
+-    # 2 and none for the two above them, so on account sign-in those two can
+-    # never fill. Strings 3 and 4 are therefore gated on an actual report
+-    # rather than created for every unit: a four-string owner on developer keys
+-    # gets them, and nobody else is left with an entity that stays unknown for
+-    # good (#139). The gate is not needs-nonzero, because zero watts is what a
+-    # string reads at night.
++    # powGetPv4); the protobuf stream also carries field numbers for strings
++    # 3 and 4 (996/997, plus voltage/current at 998-1001), confirmed against
++    # a real BK61 (Stream Ultra X) diagnostics capture: the four decoded
++    # strings are internally consistent (each string's voltage times current
++    # matches its own power) and their sum tracks the device's own PV total
++    # to within about 1 W. Strings 3 and 4 are gated on an actual report
++    # rather than created for every unit: a two-string owner never sends
++    # those fields, so gating on presence rather than listing per-prefix
++    # keeps a two-string owner from being stuck with an entity that stays
++    # unknown for good (#139). The gate is not needs-nonzero, because zero
++    # watts is what a string reads at night.
+     EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+     EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+     EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+@@ -905,6 +933,14 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
+     EcoFlowSensorDef("pv_current_a", "PV Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+     EcoFlowSensorDef("pv2_voltage_v", "PV 2 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+     EcoFlowSensorDef("pv2_current_a", "PV 2 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
++    # PV 3/4 voltage and current, same accessory gate as pv3_w/pv4_w: only
++    # created once a device actually reports the field (Stream Ultra / Ultra
++    # X, BK11/BK61), so a two-string unit never gets a permanently-unknown
++    # entity for strings it doesn't have.
++    EcoFlowSensorDef("pv3_voltage_v", "PV 3 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
++    EcoFlowSensorDef("pv3_current_a", "PV 3 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
++    EcoFlowSensorDef("pv4_voltage_v", "PV 4 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
++    EcoFlowSensorDef("pv4_current_a", "PV 4 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+     EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+     EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+     EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+@@ -1230,6 +1266,10 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
+     # lifetime total on the device that can never move off zero.
+     "solar_w",
+     "solar_energy_kwh",
++    # Aliases of solar_w/home_w above (see STREAM_SENSORS) - same absence,
++    # same reason.
++    "pv_power_total_w",
++    "system_load_w",
+ })
+ 
+ # Port priority exists on part of the Delta 3 family only. The app shows the
+diff --git a/custom_components/ecoflow_energy/coordinator/core.py b/custom_components/ecoflow_energy/coordinator/core.py
+index 87588dd..7770cf2 100644
+--- a/custom_components/ecoflow_energy/coordinator/core.py
++++ b/custom_components/ecoflow_energy/coordinator/core.py
+@@ -237,6 +237,23 @@ class EcoFlowDeviceCoordinator(
+         # Whether a Stream ever reported the system state of charge; once it
+         # has, a unit's own figure no longer stands in for it (#323).
+         self._soc_from_system = False
++
++        # SoC zero-drop guard: a report of 0% arriving right after the feed
++        # goes stale/degraded (rather than a real gradual discharge down to
++        # empty) is held back rather than published, so a dashboard does not
++        # show the battery instantly falling from e.g. 62% to 0% and back.
++        # Keyed per soc field so soc_pct and soc_precise_pct are held
++        # independently. A max hold time bounds this: a battery that
++        # genuinely is empty must eventually be shown as empty rather than
++        # frozen at its last reading forever.
++        #
++        # The last known good reading is cached explicitly here rather than
++        # read back out of `_device_data` at guard time: this cache is
++        # written and read only by the guard itself, so nothing else in the
++        # coordinator can invalidate it from underneath.
++        self._soc_last_good: dict[str, float] = {}  # key -> last real reading
++        self._soc_zero_hold: dict[str, float] = {}  # key -> monotonic ts first held
++
+         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
+         # send one SET per 5%-step during a mouse drag, which arrives at the
+         # device at ~100 ms cadence. The device cannot keep all SETs in sync
+diff --git a/custom_components/ecoflow_energy/coordinator/http_poll.py b/custom_components/ecoflow_energy/coordinator/http_poll.py
+index 2d6c34c..5658872 100644
+--- a/custom_components/ecoflow_energy/coordinator/http_poll.py
++++ b/custom_components/ecoflow_energy/coordinator/http_poll.py
+@@ -148,6 +148,7 @@ class HttpPollMixin:
+         # Resolve the Stream unit/system SoC sources before merging, just as
+         # the MQTT path does. This also removes the parser-private fallback.
+         self._resolve_soc(parsed)
++        self._guard_soc_zero_drop(parsed)
+         self._enforce_monotonic(parsed)
+         # Same pop as in _apply_data: prevent EMS raw battery state from
+         # overwriting the power-derived value (#50).
+diff --git a/custom_components/ecoflow_energy/coordinator/mqtt_ingest.py b/custom_components/ecoflow_energy/coordinator/mqtt_ingest.py
+index d565d7e..f4aafec 100644
+--- a/custom_components/ecoflow_energy/coordinator/mqtt_ingest.py
++++ b/custom_components/ecoflow_energy/coordinator/mqtt_ingest.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import json
+ import logging
+ import re
++import time
+ from typing import Any
+ 
+ from ..const import (
+@@ -129,6 +130,81 @@ class MqttIngestMixin:
+                     del parsed[key]
+         return parsed
+ 
++    # Keys guarded against a spurious 0 reading. Both SoC sensors, since a
++    # feed interruption can drop either one to 0 depending on which fields
++    # the last frame before the gap happened to carry.
++    _SOC_ZERO_GUARD_KEYS: frozenset[str] = frozenset({"soc_pct", "soc_precise_pct"})
++
++    def _guard_soc_zero_drop(self, parsed: dict[str, Any]) -> dict[str, Any]:
++        """Hold back a suspect 0% SoC reading, restoring the last known good
++        value in its place instead of publishing the 0.
++
++        A 0% report arriving right as the feed drops out - rather than from
++        a real gradual discharge - would otherwise flash a dashboard from,
++        say, 62% straight to 0% and back once the feed recovers. When an
++        incoming SoC reading is exactly 0 and a real, higher reading was
++        cached earlier, the incoming 0 is replaced with that cached value
++        before the merge runs, so the sensor keeps showing its last known
++        value until a further update settles it one way or the other.
++
++        The cache (`_soc_last_good`) is written and read only here, rather
++        than reading `_device_data` back out at guard time, so nothing else
++        in the coordinator can invalidate it from underneath. A fallback to
++        `_device_data` covers the one gap that leaves: a restart, where this
++        guard has not cached anything yet this session.
++
++        Runs after `_resolve_soc` in both callers, so it always sees the
++        final resolved `soc_pct` (system figure or unit stand-in) rather
++        than a pre-resolution value that may not end up published at all.
++
++        SOC_ZERO_HOLD_MAX_S bounds this: a suspect 0 that persists past that
++        window is accepted rather than held forever, since a battery that is
++        genuinely empty must eventually be shown as empty.
++        """
++        from ..const import SOC_ZERO_HOLD_MAX_S
++
++        now = time.monotonic()
++        for key in self._SOC_ZERO_GUARD_KEYS:
++            if key not in parsed:
++                continue
++            new = parsed[key]
++            if not (isinstance(new, (int, float)) and new == 0):
++                # A real reading (non-zero, or an explicit None clear).
++                # Cache it if numeric and clear any pending hold - whatever
++                # the hold was protecting against, it's over.
++                self._soc_zero_hold.pop(key, None)
++                if isinstance(new, (int, float)):
++                    self._soc_last_good[key] = new
++                continue
++
++            last_good = self._soc_last_good.get(key)
++            if last_good is None:
++                # This guard has not cached a reading yet this session
++                # (e.g. right after a restart) - fall back to whatever the
++                # coordinator last merged.
++                fallback = self._device_data.get(key)
++                if isinstance(fallback, (int, float)):
++                    last_good = fallback
++            if not (isinstance(last_good, (int, float)) and last_good > 0):
++                # Nothing good to protect - no previous reading anywhere,
++                # or it was already at/near zero. This 0 is not suspicious.
++                continue
++
++            held_since = self._soc_zero_hold.get(key)
++            if held_since is None:
++                held_since = now
++                self._soc_zero_hold[key] = held_since
++            if now - held_since < SOC_ZERO_HOLD_MAX_S:
++                # Restore the cached value in place of the suspect 0, then
++                # let the merge run as normal.
++                parsed[key] = last_good
++            else:
++                # Held long enough without a real reading arriving - accept
++                # it as a genuinely empty battery rather than hold forever.
++                self._soc_zero_hold.pop(key, None)
++                self._soc_last_good[key] = 0.0
++        return parsed
++
+     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
+         """Handle an incoming MQTT message (Paho thread).
+ 
+diff --git a/custom_components/ecoflow_energy/coordinator/state_apply.py b/custom_components/ecoflow_energy/coordinator/state_apply.py
+index 3e02cc0..d187657 100644
+--- a/custom_components/ecoflow_energy/coordinator/state_apply.py
++++ b/custom_components/ecoflow_energy/coordinator/state_apply.py
+@@ -99,6 +99,7 @@ class StateApplyMixin:
+             self._last_ems_param_change_ts = now
+         self._resolve_unit_power(parsed)
+         self._resolve_soc(parsed)
++        self._guard_soc_zero_drop(parsed)
+         self._note_value_change(parsed)
+         self._device_data.update(parsed)
+ 
+diff --git a/custom_components/ecoflow_energy/ecoflow/parsers/stream_http.py b/custom_components/ecoflow_energy/ecoflow/parsers/stream_http.py
+index 8d2ca8f..51274a1 100644
+--- a/custom_components/ecoflow_energy/ecoflow/parsers/stream_http.py
++++ b/custom_components/ecoflow_energy/ecoflow/parsers/stream_http.py
+@@ -138,4 +138,17 @@ def parse_stream_quota(raw: dict) -> dict[str, Any]:
+         result["batt_charge_power_w"] = batt_w if batt_w > 0 else 0.0
+         result["batt_discharge_power_w"] = abs(batt_w) if batt_w < 0 else 0.0
+ 
++    # Friendlier, enabled-by-default aliases for the two readings people ask
++    # for most on this device - see stream_proto.py's _finalize_stream_state
++    # for the Enhanced-mode equivalent. Same values as `solar_w`
++    # (powGetPvSum) and `home_w` (powGetSysLoad) above; those keep their
++    # existing names and diagnostic/off-by-default status.
++    pv_power_total = result.get("solar_w")
++    if pv_power_total is not None:
++        result["pv_power_total_w"] = pv_power_total
++
++    system_load = result.get("home_w")
++    if system_load is not None:
++        result["system_load_w"] = system_load
++
+     return result
+diff --git a/custom_components/ecoflow_energy/ecoflow/parsers/stream_proto.py b/custom_components/ecoflow_energy/ecoflow/parsers/stream_proto.py
+index 7e0356b..1c024f3 100644
+--- a/custom_components/ecoflow_energy/ecoflow/parsers/stream_proto.py
++++ b/custom_components/ecoflow_energy/ecoflow/parsers/stream_proto.py
+@@ -85,6 +85,24 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
+         # power in field 616 on units that feed everything into the grid.
+         361: ("pv1_w", _TYPE_FLOAT),
+         70: ("pv2_w", _TYPE_FLOAT),
++        # PV strings 3 and 4, present on four-string units (Stream Ultra /
++        # Ultra X, BK11/BK61). Field numbers cross-checked against the
++        # independently reverse-engineered BLE protobuf schema in
++        # rabits/ha-ef-ble (bk_series.proto: pow_get_pv3=996, pow_get_pv4=997,
++        # plug_in_info_pv3_vol/amp=998/999, plug_in_info_pv4_vol/amp=1000/1001),
++        # then confirmed against a real diagnostics capture from a BK61
++        # (Stream Ultra X): the four decoded PV strings are internally
++        # consistent (each string's voltage times current matches its own
++        # power) and their sum tracks the device's own PV total (field 517)
++        # to within about 1 W. Sensor keys already exist in const.py
++        # (pv3_w/pv4_w, accessory-gated); they were simply unreachable in
++        # Enhanced Mode until this mapping existed.
++        996: ("pv3_w", _TYPE_FLOAT),
++        997: ("pv4_w", _TYPE_FLOAT),
++        998: ("pv3_voltage_v", _TYPE_FLOAT),
++        999: ("pv3_current_a", _TYPE_FLOAT),
++        1000: ("pv4_voltage_v", _TYPE_FLOAT),
++        1001: ("pv4_current_a", _TYPE_FLOAT),
+         461: ("backup_reserve_pct", _TYPE_INT),
+         # Configured feed-in cap in watts (user-changeable in the app).
+         521: ("feed_grid_power_limit_w", _TYPE_INT),
+@@ -126,6 +144,11 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
+         # intentionally NOT mapped to the same key: it carries the slider
+         # target rather than the live value and would otherwise flap with 994.
+         994: ("led_brightness", _TYPE_INT),
++        # House/system load supplied directly from solar (pow_get_sys_load_from_pv
++        # in the ha-ef-ble schema). const.py already defines `home_from_solar_w`
++        # as a disabled-by-default diagnostic; this field number was simply
++        # never mapped, so the sensor stayed permanently unknown in Enhanced Mode.
++        1002: ("home_from_solar_w", _TYPE_FLOAT),
+         1003: ("home_from_batt_w", _TYPE_FLOAT),
+         # House/system load supplied from grid, excluding battery path.
+         1004: ("home_from_grid_w", _TYPE_FLOAT),
+@@ -318,6 +341,19 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
+     if isinstance(grid_connection, (int, float)):
+         result["ac_grid_connection_power_w"] = float(grid_connection)
+ 
++    # Friendlier, enabled-by-default aliases for the two readings people ask
++    # for most on this device. Same wire values as `solar_w` (517) and
++    # `home_w` (516) - those stay diagnostic/off-by-default and keep their
++    # existing names so nobody's history gets orphaned - these two are new
++    # keys with their own sensor definitions in const.py.
++    pv_power_total = result.get("solar_w")
++    if isinstance(pv_power_total, (int, float)):
++        result["pv_power_total_w"] = float(pv_power_total)
++
++    system_load = result.get("home_w")
++    if isinstance(system_load, (int, float)):
++        result["system_load_w"] = float(system_load)
++
+     batt_w = result.get("batt_w")
+     if isinstance(batt_w, (int, float)):
+         result["batt_charge_power_w"] = float(batt_w) if batt_w > 0 else 0.0
+diff --git a/custom_components/ecoflow_energy/strings.json b/custom_components/ecoflow_energy/strings.json
+index 38dc6ef..fb4faaa 100644
+--- a/custom_components/ecoflow_energy/strings.json
++++ b/custom_components/ecoflow_energy/strings.json
+@@ -1257,6 +1257,24 @@
+       "pv2_current_a": {
+         "name": "PV 2 Current"
+       },
++      "pv3_voltage_v": {
++        "name": "PV 3 Voltage"
++      },
++      "pv3_current_a": {
++        "name": "PV 3 Current"
++      },
++      "pv4_voltage_v": {
++        "name": "PV 4 Voltage"
++      },
++      "pv4_current_a": {
++        "name": "PV 4 Current"
++      },
++      "pv_power_total_w": {
++        "name": "PV Power Total"
++      },
++      "system_load_w": {
++        "name": "System Load"
++      },
+       "ac_current_a": {
+         "name": "AC Current"
+       },
+diff --git a/custom_components/ecoflow_energy/translations/de.json b/custom_components/ecoflow_energy/translations/de.json
+index 56f4828..4fb6baa 100644
+--- a/custom_components/ecoflow_energy/translations/de.json
++++ b/custom_components/ecoflow_energy/translations/de.json
+@@ -1320,6 +1320,24 @@
+       "pv2_current_a": {
+         "name": "PV 2 Strom"
+       },
++      "pv3_voltage_v": {
++        "name": "PV 3 Spannung"
++      },
++      "pv3_current_a": {
++        "name": "PV 3 Strom"
++      },
++      "pv4_voltage_v": {
++        "name": "PV 4 Spannung"
++      },
++      "pv4_current_a": {
++        "name": "PV 4 Strom"
++      },
++      "pv_power_total_w": {
++        "name": "PV Gesamtleistung"
++      },
++      "system_load_w": {
++        "name": "Systemlast"
++      },
+       "ac_current_a": {
+         "name": "AC-Strom"
+       },
+diff --git a/custom_components/ecoflow_energy/translations/en.json b/custom_components/ecoflow_energy/translations/en.json
+index 5d2c473..a49bae1 100644
+--- a/custom_components/ecoflow_energy/translations/en.json
++++ b/custom_components/ecoflow_energy/translations/en.json
+@@ -1320,6 +1320,24 @@
+       "pv2_current_a": {
+         "name": "PV 2 Current"
+       },
++      "pv3_voltage_v": {
++        "name": "PV 3 Voltage"
++      },
++      "pv3_current_a": {
++        "name": "PV 3 Current"
++      },
++      "pv4_voltage_v": {
++        "name": "PV 4 Voltage"
++      },
++      "pv4_current_a": {
++        "name": "PV 4 Current"
++      },
++      "pv_power_total_w": {
++        "name": "PV Power Total"
++      },
++      "system_load_w": {
++        "name": "System Load"
++      },
+       "ac_current_a": {
+         "name": "AC Current"
+       },
